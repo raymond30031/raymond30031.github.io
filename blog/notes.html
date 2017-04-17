@@ -1,0 +1,28 @@
+---
+layout: page
+title: Notes
+---
+
+<li> Summaries on Topics. </li>
+<li> Record important equations with brief explanations. </li>
+<li> Important key concepts that are easily overlooked. (Gotchas!) </li>
+
+<div class="tags-expo">
+
+{% assign tags =  site.notes | map: 'tags' | join: ','  | split: ',' | uniq %}
+{% for tag in tags %}
+  <h3>{{ tag }}</h3>
+  <ul>
+  {% for note in site.notes %}
+    {% if note.tags contains tag %}
+      <li>
+        <a class="note-title" href="{{ url }}{{ note.url }}">
+            {{ note.title }}
+        </a>
+        <small class="note-date"> ({{ note.date | date_to_string }})</small>
+      </li>
+    {% endif %}
+  {% endfor %}
+  </ul>
+{% endfor %}
+</div>
