@@ -58,7 +58,7 @@ $$h_\theta(x) < 0.5 \rightarrow y = 0$$
 
 The way our logistic function g behaves is that when its input is greater than or equal to zero, its output is greater than or equal to 0.5.
 
-$$ g(z) \geq 0.5$$ when $$z \geq 0$$
+$$ \begin{align*}& g(z) \geq 0.5 \text{ when } z \geq 0 \end{align*} $$
 
 Recall:
 
@@ -70,16 +70,12 @@ $$ z \to -\infty, e^{\infty}\to \infty \Rightarrow g(z)=0 $$
 
 So if our input to g is $$ h_\theta(x) $$ , then that means:
 
-$$ h_\theta(x) = g(\theta^T x) \geq 0.5 $$ when $$ \theta^T x \geq 0$$
-
-$$ \theta^T x \geq 0 \Rightarrow y = 1 $$
-
-$$ \theta^T x < 0 \Rightarrow y = 0 $$
+$$ \begin{align*}& h_\theta(x) = g(\theta^T x) \geq 0.5  \text{ when } \theta^T x \geq 0 \newline & \theta^T x \geq 0 \Rightarrow y = 1 \newline & \theta^T x < 0 \Rightarrow y = 0 \end{align*} $$
 
 #### Example: Linear 
 ![sigmoid function]({{site.url}}/notes/Machine_Learning/week3/images/linear_decision_boundary.png)
 
-$$ \begin{align*}& \theta = \begin{bmatrix}-3 \newline 1 \newline 1\end{bmatrix} \newline & y = 1 \; if \; -3 + x_1 + x_2 \geq 0 \newline & x_1 + x_2 \geq 3 is the decision boundary line \end{align*} $$
+$$ \begin{align*}& \theta = \begin{bmatrix}-3 \newline 1 \newline 1\end{bmatrix} \newline & y = 1 \; if \; -3 + x_1 + x_2 \geq 0 \newline & x_1 + x_2 \geq 3 \text{ is the decision boundary line} \end{align*} $$
 
 #### Example: Non-Linear
 We can create more complex decision boundary with higher order (greater capacity) polynomials.
