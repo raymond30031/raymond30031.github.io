@@ -19,11 +19,11 @@ author:
 paginate:         5
 
 # Custom vars
-gems:
+plugins:
   - jekyll-paginate
   - redcarpet
   - jekyll-gist
-  - pygments.rb
+  - rb-pygments.rb
 
 github:
   repo:           https://github.com/raymond30031/raymond30031.github.io
