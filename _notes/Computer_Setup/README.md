@@ -1,6 +1,7 @@
+---
 layout: notes
 title: "README"
-tags: [Computer setup]       
+tags: [Computer Setup]       
 date: 2018-03-20     
 ---
 

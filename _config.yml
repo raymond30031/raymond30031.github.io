@@ -18,8 +18,10 @@ author:
 
 paginate:         5
 
+gems: [jekyll-paginate]
+
 # Custom vars
-plugins:
+plugins_dir:
   - jekyll-paginate
   - redcarpet
   - jekyll-gist
