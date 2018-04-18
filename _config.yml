@@ -18,7 +18,7 @@ author:
 
 paginate:         5
 
-gems: [jekyll-paginate]
+plugins: [jekyll-paginate]
 
 # Custom vars
 plugins_dir:
