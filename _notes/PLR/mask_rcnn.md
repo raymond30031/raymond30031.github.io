@@ -29,6 +29,11 @@ Ref: https://github.com/aleju/imgaug
 Still throws error because opencv-python and imgaug are not in the default channels of conda for searching.
 So I removed them and install the requirement.txt again.
 
+### File copy with leonhard
+
+#### from leonhard to your pc
+scp jkuo@login.leonhard.ethz.ch:/path_to_file/filename .
+
 ### Run demo from leonhard
 
 1. first conda install jupyter
@@ -67,3 +72,49 @@ conda install notebook
 
 Ref:
 https://github.com/matterport/Mask_RCNN/issues/6
+
+### Train on Leonhard
+
+#### CPU
+The conda env maskrcnn contains tensorflow with cpu, so running it only utilizes the cpu
+maybe create one with gpu version when needed
+
+#### GPU
+training does not require external library such as, imgaug (unless specified in model.train()) or pycocotools,
+so we can just use 'load module python_gpu/3.6.4' for the gpu version of the tensorflow
+
+If encounter multiprocessing error:
+disable the multiprocessing in model.py, set worker to 1 and use_multiprocessing to False
+
+load the modules:
+module load python_gpu/3.6.4 hdf5/1.10.1
+
+Run job, -W min -R requests:
+bsub -W 720 -R "rusage[mem=32768,scratch=4096,ngpus_excl_p=1]" python demo.py
+
+Need to install these packages locally because they are not in the python_gpu module, don't forget to load python
+general command:
+python -m pip install --user package
+
+package:
+scikit-image
+
+#### Stop job
+bkill job_id
+
+### Set up Tensorboard
+
+ssh jkuo@login.leonhard.ethz.ch -L 16006:127.0.0.1:6006
+What it does is that everything on the port 6006 of the server (in 127.0.0.1:6006) will be forwarded to my machine on the port 16006.
+
+load the cpu module because gpu only works if you submit a job:
+module load python_cpu/3.6.4 hdf5/1.10.1
+
+type the command at Mask RCNN root dir:
+tensorboard --logdir ./DEBUG
+
+On your local machine, go to http://127.0.0.1:16006 and enjoy your remote TensorBoard.
+
+
+Ref:
+https://stackoverflow.com/questions/37987839/how-can-i-run-tensorboard-on-a-remote-server
