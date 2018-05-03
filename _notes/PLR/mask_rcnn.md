@@ -98,6 +98,7 @@ python -m pip install --user package
 
 package:
 scikit-image
+opencv-python
 
 #### Stop job
 bkill job_id
