@@ -91,7 +91,8 @@ module load python_gpu/3.6.4 hdf5/1.10.1
 
 Run job, -W min -R requests:
 bsub -W 720 -R "rusage[mem=32768,scratch=4096,ngpus_excl_p=1]" python demo.py
-
+bsub -W 1440 -R "rusage[mem=16384,scratch=4096,ngpus_excl_p=1]" python train_hdf5.py
+16384
 Need to install these packages locally because they are not in the python_gpu module, don't forget to load python
 general command:
 python -m pip install --user package
@@ -105,17 +106,25 @@ bkill job_id
 
 ### Set up Tensorboard
 
-ssh jkuo@login.leonhard.ethz.ch -L 16006:127.0.0.1:6006
+ssh jkuo@login.leonhard.ethz.ch -L 16006:127.0.0.1:16006
 What it does is that everything on the port 6006 of the server (in 127.0.0.1:6006) will be forwarded to my machine on the port 16006.
 
 load the cpu module because gpu only works if you submit a job:
 module load python_cpu/3.6.4 hdf5/1.10.1
 
 type the command at Mask RCNN root dir:
-tensorboard --logdir ./DEBUG
+tensorboard --logdir ./logs --port=16006
 
 On your local machine, go to http://127.0.0.1:16006 and enjoy your remote TensorBoard.
 
 
 Ref:
 https://stackoverflow.com/questions/37987839/how-can-i-run-tensorboard-on-a-remote-server
+
+### Training
+
+### last
+When train from last, make sure the name in config is the same as that is how it finds the lastest one. Aslo the training epoch is with respect to the total epoch.
+1. change training epoch to the total number of epoch after this training step eg. 100 if starting from 50 with a training set of 50
+2. change the dataset index to the correct one
+
