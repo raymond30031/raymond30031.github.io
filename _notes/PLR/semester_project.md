@@ -171,6 +171,14 @@ error: libv4l2.h: No such file or directory
 #### imgaug
 i think it requries python3 as well
 
+#### using service in mask_rcnn_ros_node
+Apparently, for keras, you get the following error:
+Tensor Tensor("mrcnn_detection/Reshape_1:0", shape=(1, 100, 6), dtype=float32) is not an element of this graph.
+When calling inference from another process.
+
+see solution and reference:
+https://blog.csdn.net/Cyril__Li/article/details/79054596 
+
 ### environment that runs demo.py virtualevn setup
 
 ### embedding python in c++
@@ -276,3 +284,24 @@ https://stackoverflow.com/questions/6141147/how-do-i-include-a-path-to-libraries
 https://stackoverflow.com/questions/13440549/gcc-verbose-mode-output-explanation
 
 ### upgrade cudnn
+
+### ZED MINI
+#### installation
+
+Download:
+https://www.stereolabs.com/developers/release/2.7/#sdkdownloads_anchor
+Documentation:
+https://docs.stereolabs.com/overview/getting-started/installation/
+Git Driver:
+https://github.com/stereolabs/zed-ros-wrapper
+
+#### Roslaunch wrapper
+once driver is installed:
+roslaunch zed_wrapper zed.launch
+roslaunch zed_display_rviz display_zedm.launch # open a ZED Mini
+
+cd ~/maplab_ws/src/maplab_private/applications/rovioli/share/zed_mini
+./run_zedmini_rostopic.sh ~/save_folder
+
+record bag:
+rosbag record -o zed_mini /rosout /rosout_agg /zed/imu/data /zed/imu/data_raw /zed/left/camera_info /zed/left/camera_info_raw /zed/left/image_raw_color /zed/right/camera_info /zed/right/camera_info_raw /zed/right/image_raw_color
