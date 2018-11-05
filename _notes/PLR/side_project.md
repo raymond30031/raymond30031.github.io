@@ -9,10 +9,35 @@ rosbag play /media/jkuo/Data/side_project/airground_rig_s3_2013-03-18_21-38-48.b
 set the namespace to svo, then it would show # of tracked feature
 
 ### pipeline
-svo_node -> subscribeImage() -> new thread for monoLoop -> set up subscriber for monoCallBack():
-process image bundle and publish results
-note svo_ is a framehandler 
--> processImageBundle -> addImageBundle -> addFrameBundle -> processFrameBundle
+svo_node (wraps a svo_interface_) -> svo_interface sets up the publisher and subscriber -> creates the pipeline type(mone/stereo param to constructor) -> new thread for monoLoop -> set up subscriber for monoCallBack()
+
+In monoCallBack():
+  //process image bundle
+  processImageBundle(): 
+    svo_->addImageBundle(images, timestamp_nanoseconds)
+    note svo_ is a framehandler mono derived from base 
+
+In framehandler_base/mono:
+  in addImageBundle() from base class:
+    puts the cv:Mat imgs into framebundle and calls addFrameBundle() from base class
+  in addFrameBundle from base class:
+    assign the framebundle to new_frames_ (current framebundle being processed)
+    res = processFrameBundle() from mono: // Perform tracking.
+      processFrame() or processFirstFrame() from mono:
+        processFirstFrame():
+    assign the new_frames_ to last_frames (last framebundle that was processed)
+  
+
+
+publish results
+
+### Sparse Image alignment pipeline
+the sparse image alignment module has the following inheritance:
+minileastsquare_solver -> sparse image align base -> sparse image align
+In the frame_handler_base, it passes the frame bundles to the run() function, which optimizes the frames
+see line 73 where the transformations are loaded in to states for optimization
+see line 103 goes through each frame and saves the new optimized frame
+in the end of the function, it returns the number of tracked feature points.
 
 ### Questions while reading SVO code
 
@@ -45,16 +70,19 @@ Why does downfacing require special treatment?
 
 Look into why keyframe selection for mono works, but not for others?
 
+#### frame vs frame bundle
+frame bundle wraps frame around, 
+for mono there is one frame in the frame bundle
+for stereo, it stores the frames from the two cameras at this time instance in it.
+
 ####cpp question:
 frame_handler_mono.cpp line 54
 what is {img}
 
-### Test code
+### glog tutorial
 
-source ~/work/Mask_RCNN/venv2.7/bin/activate
-python
-import sys
-sys.path.append("/home/jkuo/work/Mask_RCNN/") // need this to import mrcnn.model
-sys.path.append("/home/jkuo/work/Mask_RCNN/samples/maplab_interface")
-import maplab_interface as interface
-model = interface.create_model()
+Ref:
+http://rpg.ifi.uzh.ch/docs/glog.html
+
+### setup catkin config
+https://www.personalrobotics.ri.cmu.edu/software/development-environment
