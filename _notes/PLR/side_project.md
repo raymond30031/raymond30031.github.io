@@ -1,6 +1,9 @@
 ### Installation
 follow the instructions in the rpg_svo_pro repo readme
 
+### Build
+catkin build
+
 ### run test
 roslaunch svo_ros run_from_bag.launch cam_name:=svo_test_pinhole
 
@@ -25,6 +28,11 @@ In framehandler_base/mono:
     res = processFrameBundle() from mono: // Perform tracking.
       processFrame() or processFirstFrame() from mono:
         processFirstFrame():
+          sets first frame as keyframe
+          adds first frame as keyframe in map
+        processFrame():
+          sparseImageAlignment():
+          poseOptimization():
     assign the new_frames_ to last_frames (last framebundle that was processed)
   
 
@@ -86,3 +94,7 @@ http://rpg.ifi.uzh.ch/docs/glog.html
 
 ### setup catkin config
 https://www.personalrobotics.ri.cmu.edu/software/development-environment
+
+### Log to file in launch file
+through glog we can do this
+<node pkg="svo_ros" type="svo_node" name="svo" clear_params="true" output="screen" args='--v=1 --log_dir=/home/jkuo/' >
