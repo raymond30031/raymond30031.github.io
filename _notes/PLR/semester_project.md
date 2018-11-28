@@ -302,6 +302,204 @@ roslaunch zed_display_rviz display_zedm.launch # open a ZED Mini
 
 cd ~/maplab_ws/src/maplab_private/applications/rovioli/share/zed_mini
 ./run_zedmini_rostopic.sh ~/save_folder
+./run_zedmini_rosbag.sh /media/jkuo/ASL_SamsungT5/zed_mini/map/ros_time/03/map /media/jkuo/ASL_SamsungT5/zed_mini/map/ros_time/03/zed_mini_map_2018-11-20-10-47-59.bag
+
+rosrun rviz rviz -d /home/jkuo/maplab_ws/src/maplab_private/applications/rovioli/share/
 
 record bag:
 rosbag record -o zed_mini /rosout /rosout_agg /zed/imu/data /zed/imu/data_raw /zed/left/camera_info /zed/left/camera_info_raw /zed/left/image_raw_color /zed/right/camera_info /zed/right/camera_info_raw /zed/right/image_raw_color
+
+### Optimize vimap with maplab
+itl: Initialize all unprocessed but tracked landmarks. relaxes the pose graph 
+rtl: retriangulate all landmarks
+repeat:
+  optvi: optimize pose graph based on visual and imu
+  elq: evaluate landmarks quality, remove bad quality landmarks
+  lc: loop closure 
+  optvi:
+  elq:
+
+
+### Kalibr
+MultiCamera:
+kalibr_calibrate_cameras --target aprilgrid.yaml --bag /home/jkuo/zed_mini_both_current_sub.bag --models pinhole-equi pinhole-equi --topics /zed/left/image_raw_color /zed/right/image_raw_color  --verbose --show-extraction
+
+IMU Camera calibration:
+kalibr_calibrate_imu_camera --bag /home/jkuo/zed_mini_both_current.bag --cam ./camchain-homejkuozed_mini_both_current.yaml --imu imu.yaml --target aprilgrid.yaml
+
+#### calibrate multi camera
+rosrun kalibr_calibrate_cameras --target aprilgrid.yaml --bag /home/jkuo/zed_mini_both_current_2018-11-07-14-30-50.bag --models pinhole-equi pinhole-equi --topics /zed/left/image_raw_color /zed/right/image_raw_color
+
+#### convert calibration result for rovioli use
+kalibr_maplab_config --cam camchain-imucam-.zed_mini_imu.yaml --imu imu-.zed_mini_imu.yaml
+ref:
+https://github.com/ethz-asl/maplab_private/wiki/Calibration
+
+#### Errors
+##### cannot import name NavigationToolbar2Wx
+solution:
+https://github.com/ethz-asl/kalibr/issues/202
+
+install igraph
+https://stackoverflow.com/questions/36200707/error-with-igraph-library-deprecated-library
+
+
+###Backup
+rovio has some deeper shit below that does not accet colour images. Adding the following code does not make rovioli run,
+but makes it stop complaining about cvtColor.
+
+making colour image work:
+diff --git a/include/rovio/ImgUpdate.hpp b/include/rovio/ImgUpdate.hpp
+index d7852b3..2784a22 100644
+--- a/include/rovio/ImgUpdate.hpp
++++ b/include/rovio/ImgUpdate.hpp
+@@ -614,7 +614,11 @@ ImgOutlierDetection<typename FILTERSTATE::mtState>,false>{
+     CHECK(filterState.t_ == meas.aux().imgTime_);
+     for(int i=0;i<mtState::nCam_;i++){
+       if(doFrameVisualisation_){
+-        cvtColor(meas.aux().pyr_[i].imgs_[0], filterState.img_[i], CV_GRAY2RGB);
++        int img_channel = (meas.aux().pyr_[i].imgs_[0]).channels();
++        if(img_channel == 3)
++          continue;
++        else
++          cvtColor(meas.aux().pyr_[i].imgs_[0], filterState.img_[i], CV_GRAY2RGB);
+
++++ b/applications/rovioli/include/rovioli/ros-helpers.h
+@@ -18,6 +18,11 @@
+ 
+ #include <vio-common/vio-types.h>
+ 
++//for converting bgra to bgr
++#include <opencv2/imgproc.hpp>
++#include <opencv2/highgui/highgui.hpp>
++#include <opencv2/core.hpp>
++
+ namespace rovioli {
+ 
+ inline int64_t rosTimeToNanoseconds(const ros::Time& rostime) {
+@@ -37,13 +42,55 @@ inline vio::ImuMeasurement::Ptr convertRosImuToMaplabImu(
+   return imu_measurement;
+ }
+ 
++/* to switch on type string from image encoding
++   avoid using if for better optimization
++   discussion:
++   https://stackoverflow.com/questions/650162/why-the-switch-statement-cannot-be-applied-on-strings
++*/
++enum EncodingStringValue { evMono8,
++                           evBGR8,
++                           evBGRA8};
++
++// Map to associate the strings with the enum values
++static std::map<std::string, EncodingStringValue> mapStringValues = {
++  {"mono8", evMono8},
++  {"bgr8", evBGR8},
++  {"bgra8", evBGRA8}}; 
++
+ inline vio::ImageMeasurement::Ptr convertRosImageToMaplabImage(
+     const sensor_msgs::ImageConstPtr& image_message, size_t camera_idx) {
+   CHECK(image_message);
++  // LOG(INFO) << "img ecnoding " << image_message->encoding;
++  // LOG(INFO) << "img height " << image_message->height;
++  // LOG(INFO) << "img width " << image_message->width;
++  // LOG(INFO) << "img step " << image_message->step;
++  // LOG(INFO) << "img array length " << sizeof(image_message->data);///sizeof(image_message->data);
++  //check for conversion
++  bool cvtBGRA2BGR = false;
+   cv_bridge::CvImageConstPtr cv_ptr;
+   try {
+-    cv_ptr = cv_bridge::toCvShare(
+-        image_message, sensor_msgs::image_encodings::TYPE_8UC1);
++    // to support different encodings
++    switch(mapStringValues[image_message->encoding]){
++      case evMono8:
++        cv_ptr = cv_bridge::toCvShare(
++          image_message, sensor_msgs::image_encodings::TYPE_8UC1);
++        break;
++      case evBGR8:
++        cv_ptr = cv_bridge::toCvShare(
++          image_message, sensor_msgs::image_encodings::TYPE_8UC3);
++        break;
++      case evBGRA8:
++        cv_ptr = cv_bridge::toCvShare(
++          image_message, sensor_msgs::image_encodings::TYPE_8UC4);
++        cvtBGRA2BGR = true;
++        break;
++      default:
++        LOG(INFO) << "using default for unhandled image encoding: " 
++                  <<image_message->encoding;
++        cv_ptr = cv_bridge::toCvShare(
++          image_message, sensor_msgs::image_encodings::TYPE_8UC1);
++    }
++    
+   } catch (const cv_bridge::Exception& e) {  // NOLINT
+     LOG(FATAL) << "cv_bridge exception: " << e.what();
+   }
+@@ -55,6 +102,23 @@ inline vio::ImageMeasurement::Ptr convertRosImageToMaplabImage(
+   // data alive without holding on to the CvImage is not possible without
+   // letting all the code depend on ROS and boost.
+   image_measurement->image = cv_ptr->image.clone();
++  // convert from bgra to bgr
++  if(cvtBGRA2BGR) {
++    int rows = image_measurement->image.rows;
++    int cols = image_measurement->image.cols;
++    cv::Mat dst(rows,cols,CV_8UC3);
++    LOG(INFO) << "old img channel: "<<(image_measurement->image).channels();
++    LOG(INFO) << "old img rows: "<<rows;
++    LOG(INFO) << "old img cols: "<<cols;
++    cv::imwrite( "/home/jkuo/old.jpg", image_measurement->image );
++    cv::cvtColor(image_measurement->image, dst, cv::COLOR_BGRA2BGR);
++    image_measurement->image = dst;
++    cv::imwrite( "/home/jkuo/new.jpg", image_measurement->image );
++    LOG(INFO) << "new img channel: "<<(image_measurement->image).channels();
++    LOG(INFO) << "new img rows: "<<image_measurement->image.rows;
++    LOG(INFO) << "new img cols: "<<image_measurement->image.cols;
++  }
++  
+
+
+### ROSBAG
+record bag for a map:
+rosbag record -o zed_mini_map /rosout /rosout_agg /zed/imu/data /zed/imu/data_raw /zed/left/camera_info /zed/left/camera_info_raw /zed/left/image_raw_color /zed/right/camera_info /zed/right/camera_info_raw /zed/right/image_raw_color --buffsize=0 --lz4 --chunksize=4096
+#### split bag
+rosbag filter zed_mini_2018-11-08-14-00-29.bag output.bag "t.secs <= 1541682031.07"
+
+### resource importer
+need to catkin build resource_importer
+rosrun resource_importer import_resources_w_ncamera_yaml.sh map_folder_0 output.bag /zed/left/image_raw_color d90edaf392d0e4d2e1791e4f8f7be49e.yaml ./map_resource
+
+### Start semantify
+rosrun mask_rcnn_ros mask_rcnn_node.py
+rosrun maplab_console maplab_console
+load --map_folder /media/jkuo/ASL_SamsungT5/zed_mini/map/ros_time/01/map_resource/
+semantify
+res_stats
+save --map_folder path/to/save/the/map --overwrite
+
+### Visualize Bounding boxes
+visualize_bounding_boxes --vis_resource_visualization_frequency 1
+
+## Math
+### Quadric to Conic
+General Ellipse equation:
+https://www.maa.org/external_archive/joma/Volume8/Kalman/General.html
+
+The opencv function for drawing ellipse takes some other parameters:
+https://docs.opencv.org/2.4/modules/core/doc/drawing_functions.html#ellipse
+
+to draw the full ellipse, set start angle to 0 and end angle to 360
+The axes represents the major and minor axis of the ellipse.
+https://books.google.ch/books?id=LPm3DQAAQBAJ&pg=PA160&lpg=PA160&dq=opencv+size+axes&source=bl&ots=2vLlTbfiwf&sig=BhsCpLYzhrF3gENrqAbNIQb-77w&hl=en&sa=X&ved=2ahUKEwiUheSIv_TeAhXCAewKHVybClEQ6AEwBXoECAQQAQ#v=onepage&q=opencv%20size%20axes&f=false
+example:
+http://opencvexamples.blogspot.com/2013/10/basic-drawing-examples.html
+
+To get the axis length:
+https://en.wikipedia.org/wiki/Matrix_representation_of_conic_sections
+https://math.stackexchange.com/questions/616645/determining-the-major-minor-axes-of-an-ellipse-from-general-form
+
+To get the center of the ellipse and the rotation angle:
+https://math.stackexchange.com/questions/2766028/i-want-to-draw-ellipse-using-ellipse-equation-general
+
+More math reference:
+https://www.maa.org/external_archive/joma/Volume8/Kalman/TransformedEqn.html
+https://www.maa.org/external_archive/joma/Volume8/Kalman/General.html
