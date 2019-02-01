@@ -302,7 +302,7 @@ roslaunch zed_display_rviz display_zedm.launch # open a ZED Mini
 
 cd ~/maplab_ws/src/maplab_private/applications/rovioli/share/zed_mini
 ./run_zedmini_rostopic.sh ~/save_folder
-./run_zedmini_rosbag.sh /media/jkuo/ASL_SamsungT5/zed_mini/map/ros_time/03/map /media/jkuo/ASL_SamsungT5/zed_mini/map/ros_time/03/zed_mini_map_2018-11-20-10-47-59.bag
+./run_zedmini_rosbag.sh /media/jkuo/ASL_SamsungT5/zed_mini/map/ros_time/07/map /media/jkuo/ASL_SamsungT5/zed_mini/map/ros_time/07/zed_mini_map_2018-11-20-10-47-59.bag
 
 rosrun rviz rviz -d /home/jkuo/maplab_ws/src/maplab_private/applications/rovioli/share/
 
@@ -315,7 +315,7 @@ rtl: retriangulate all landmarks
 repeat:
   optvi: optimize pose graph based on visual and imu
   elq: evaluate landmarks quality, remove bad quality landmarks
-  lc: loop closure 
+  lc: loop closure, merge points
   optvi:
   elq:
 
@@ -473,11 +473,57 @@ rosrun mask_rcnn_ros mask_rcnn_node.py
 rosrun maplab_console maplab_console
 load --map_folder /media/jkuo/ASL_SamsungT5/zed_mini/map/ros_time/01/map_resource/
 semantify
+semantify --semantify_start_index 97
 res_stats
 save --map_folder path/to/save/the/map --overwrite
 
 ### Visualize Bounding boxes
 visualize_bounding_boxes --vis_resource_visualization_frequency 1
+
+### Generate Quadrics
+generate_init_quadric --tracking_method 1 --tracking_min_persistent_keypoints_threshold 15
+eval_quadric --eval_quadric_id 180 --eval_bb_up_to_num 20
+
+#### no effect for centroid_keypoints_shift ratio
+##### for multichair case:
+generate_init_quadric --tracking_method 1 --tracking_min_persistent_keypoints_threshold 15 --init_quadric_min_bounding_box_num 50 --semantify_visualization_frequency 0.1 --tracking_centroid_keypoint_shift_ratio 100
+
+generate_init_quadric --tracking_method 1 --tracking_min_persistent_keypoints_threshold 20 --init_quadric_min_bounding_box_num 40 --semantify_visualization_frequency 0.05 --tracking_centroid_keypoint_shift_ratio 100.0
+
+generate_init_quadric --tracking_method 1 --tracking_min_persistent_keypoints_threshold 10 --init_quadric_min_bounding_box_num 20 --semantify_visualization_frequency 0.05 --tracking_centroid_keypoint_shift_ratio 100.0
+
+to disable condition number check:
+visualize_initialized_tracked_objs --init_quadric_max_condition_number 99999
+
+eval_quadrics_quality --eval_quadrics_field_of_view 45
+
+trial #1:
+generate_init_quadric --tracking_method 1 --tracking_min_persistent_keypoints_threshold 12 --init_quadric_min_bounding_box_num 15 --semantify_visualization_frequency 0.05 --tracking_centroid_keypoint_shift_ratio 100.0 --init_quadric_max_condition_number 99999
+
+visualize_initialized_tracked_objs --init_quadric_max_condition_number 3000 --init_quadric_min_bounding_box_num 15 --semantify_visualization_by_class true
+
+eval_quadrics_quality --eval_quadrics_field_of_view 43
+
+trial #2:
+generate_init_quadric --tracking_method 1 --tracking_min_persistent_keypoints_threshold 12 --init_quadric_min_bounding_box_num 10 --semantify_visualization_frequency 0.05 --tracking_centroid_keypoint_shift_ratio 10.0 --init_quadric_max_condition_number 3000
+
+visualize_initialized_tracked_objs --init_quadric_max_condition_number 3000 --init_quadric_min_bounding_box_num 10 --semantify_visualization_by_class true
+
+eval_quadrics_quality --eval_quadrics_field_of_view 40
+
+eval_quadric --eval_quadric_id 170 --eval_bb_up_to_num 0 --semantify_visualization_frequency 0.05 --init_quadric_max_condition_number 3000 --semantify_visualization_by_class true
+
+##### for the single chair case:
+generate_init_quadric --tracking_method 1 --tracking_min_persistent_keypoints_threshold 2 --init_quadric_min_bounding_box_num 40 --semantify_visualization_frequency 0.05 --tracking_centroid_keypoint_shift_ratio 100.0
+
+perfect data association:
+generate_init_quadric --tracking_method 0 --semantify_visualization_frequency 0.05 --tracking_centroid_threshold 30
+
+### Eval/visualize quadric id
+eval_quadric --eval_quadric_id 0 --eval_bb_up_to_num 0 --semantify_visualization_frequency 0.05
+
+### Eval quadrics quality, remove ones that has limited field of view
+eval_quadrics_quality --eval_quadrics_field_of_view 30
 
 ## Math
 ### Quadric to Conic
@@ -503,3 +549,11 @@ https://math.stackexchange.com/questions/2766028/i-want-to-draw-ellipse-using-el
 More math reference:
 https://www.maa.org/external_archive/joma/Volume8/Kalman/TransformedEqn.html
 https://www.maa.org/external_archive/joma/Volume8/Kalman/General.html
+
+### inspect image pixel value
+edisplay --gl ~/mask_inverse.ppm
+
+### OpenCV questions:
+#### OpenCV Point(x,y) represent (column,row) or (row,column)
+So, this means that src.at(i,j) is using (i,j) as (row,column) but Point(x,y) is using (x,y) as (column,row)
+Ref: https://stackoverflow.com/questions/25642532/opencv-pointx-y-represent-column-row-or-row-column
