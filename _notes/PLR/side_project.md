@@ -37,7 +37,8 @@ In framehandler_base/mono:
   
 
 
-publish results
+publisRresults():
+  visualizer_ handles the publishing
 
 ### Sparse Image alignment pipeline
 the sparse image alignment module has the following inheritance:
@@ -98,3 +99,21 @@ https://www.personalrobotics.ri.cmu.edu/software/development-environment
 ### Log to file in launch file
 through glog we can do this
 <node pkg="svo_ros" type="svo_node" name="svo" clear_params="true" output="screen" args='--v=1 --log_dir=/home/jkuo/' >
+
+### Camera Driver
+follow this link:
+https://github.com/uzh-rpg/rpg_bluefox
+#### launch and change param
+for fisheye:
+roslaunch svo_ros live_nodelet_fisheye.launch serial_nr:=25001527
+for pinhole:
+roslaunch svo_ros live_nodelet.launch serial_nr:=25001527
+
+add these two lines under the camera driver section of the launch file if want autoexposure.
+May need it if want to work with low light area like the floor:
+<param name="cam_ctrl_mode" value="AutoExposureGain" />
+<param name="ae_method" value="Intensity" />
+
+In svo_ros/param/pinhole, change to true if want enable autoexposure:
+img_align_est_illumination_gain: false
+img_align_est_illumination_offset: false
