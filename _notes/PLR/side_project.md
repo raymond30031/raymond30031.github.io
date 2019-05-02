@@ -27,18 +27,99 @@ In framehandler_base/mono:
     assign the framebundle to new_frames_ (current framebundle being processed)
     res = processFrameBundle() from mono: // Perform tracking.
       processFrame() or processFirstFrame() from mono:
+        // processFirstFrame until initialized
         processFirstFrame():
           sets first frame as keyframe
           adds first frame as keyframe in map
+        // only go into processFrame once map is initialized by two keyframe
         processFrame():
           sparseImageAlignment():
+          projectMapInFrame()
           poseOptimization():
+          // adds our entropy calculation after pose opt, so can be used later in kf selection
+          keyframeSelection():
+          if keyframe:
+            add keyframe to map
+          if map size > max:
+            remove the furthest keyframe from current pose
     assign the new_frames_ to last_frames (last framebundle that was processed)
-  
 
+In framehandler_stereo:
+  ProcessFrameBundle():
+    if stage_ == initialization:
+      make both frames from cameras keyframes and triangulate landmarks
+    if stage_ == tracking:
+      ProcessFrame():
+        SparseImageAlignment()
+        projectMapInFrame()
+        PoseOptimization()
+          Here if not enough features then we just make a new keyframe by triangulating landmarks.
+          It does not re-initialize using the initializer, so it does not lose the current map in the pipline
+        keyframeSelection()
+        MapCulling()
+  MakeKeyframe():
+    only the frame from cam0 is saved in map and used as keyframe because Christian assumed the cameras are close enough,
+    so the landmarks they observe have a large overlap and it is not necessary to save both
+
+projectMapInFrame() projects the current map(consists of keyframes) into the current frame and check if the keyframes has 
+overlapping views and returns matched features.
+
+FrameHandlerBase::projectMapInFrame():
+  // get closest keyframes for every frame in the current framebundle
+  overlap_kfs_.clear() for every new framebundle
+  Map::getClosestNKeyframesWithOberlap():
+    Check all keyframes in the map if their keypoints are visible in the current framebundle. If one keypoint is visible,
+    then push the FramePtr of the keyframe into a close_kfs list. It stores the FramePtr and the distance of the keyframe
+    from the current frame. The list is then sorted based on distance with closest first and furthest last. It is then
+    truncated to N size long, where N = std::min(num_frames, overlap_kfs.size()) and num_frames is option.max_n_kf.
+    Now we have the overlap_kfs_
+  // reprojection by reprojectors
+  Reprojector::reprojectFrames():
+    reproject all landmarks in overlapping keyframes to current frame. These patches of these landmarks become candidates 
+    for matching to patches of the reprojection of these landmarks in the current frame. This is the Relaxation and Refinement
+    part of the paper.
+    In the end, the func returns # of matched features (corners and edgelets)
+
+   
+keyframeSelection() is the needNewKf() function in frame_handler_base, it is type casted into NewKeyFrameCriteria need_new_kf_
+  for stereo, there is only forward mode
+  Forward:
+    if(n_tracked_fts > options_.kfselect_numkfs_upper_thresh)
+    {
+      VLOG(40) << "KF Select: NO NEW KEYFRAME Above upper bound";
+      return false;
+    }
+
+    // TODO: this only works for mono!
+    if(last_frames_->at(0)->id() - map_->last_added_kf_id_ < options_.kfselect_min_num_frames_between_kfs)
+    {
+      VLOG(40) << "KF Select: NO NEW KEYFRAME We just had a KF";
+      return false;
+    }
+
+    if(n_tracked_fts < options_.kfselect_numkfs_lower_thresh)
+    {
+      VLOG(40) << "KF Select: NEW KEYFRAME Below lower bound";
+      return true;
+    }
+
+    
+
+How id works:
+There are two kinds of ID, FrameBundleID and Frame ID. A framebundle contains the frames at the same time.
+Frames are coverted from cv_mat and inserted to framebundle in FrameHandlerBase::addImageBundle().
+The Frame class has a counter that increments everytime a frame is created and it is used for id.
+So for mono, FrameBundleID = FrameID, but not the case for stereo and above.
 
 publisRresults():
   visualizer_ handles the publishing
+
+updateSeeds():
+Only update the uncertainty/depth of the seeds, does not upgrade to landmarks
+
+upgradeSeedsToFeatures():
+upgrade seeds to landmarks, if not enough features (< min features) will upgrade unconverged seeds 
+
 
 ### Sparse Image alignment pipeline
 the sparse image alignment module has the following inheritance:
@@ -47,6 +128,14 @@ In the frame_handler_base, it passes the frame bundles to the run() function, wh
 see line 73 where the transformations are loaded in to states for optimization
 see line 103 goes through each frame and saves the new optimized frame
 in the end of the function, it returns the number of tracked feature points.
+
+Sparse Image alignment solves the transformation from last frame to current frame.
+It incrementally optimize, starting with identity transformation, the objective to reduce the photometric error of the 
+known 3D points that are visible in the last frame. The residual is compute between the patches of pixels of the 3D points
+projection in both frames.
+
+### Pose Refinement
+
 
 ### Questions while reading SVO code
 
@@ -117,3 +206,112 @@ May need it if want to work with low light area like the floor:
 In svo_ros/param/pinhole, change to true if want enable autoexposure:
 img_align_est_illumination_gain: false
 img_align_est_illumination_offset: false
+
+### RPG datasets
+https://github.com/uzh-rpg/rpg_datasets
+
+#### vfr dataset
+download the dataset from here:http://rpg.ifi.uzh.ch/fov.html
+unzip and put all under in this folder /rpg_datasets/rpg_vfr_pinhole/rpg_vfr
+that directory contains the calibration file
+run this to create the bag:
+rosrun rpg_datasets images_to_bag.py /home/jkuo/rpg_work/src/rpg_datasets/rpg_vfr_pinhole/rpg_vfr/
+
+since the ground truth does not have timestamp and for trajectory eval we need ground truth to have timestamp
+images_and_poses_to_bag.py in script is created to attatch the image time to ground truth because it is synthetic
+then you can use bag_to_pose.py from traj eval to extract the ground_truth.txt
+
+#### euroc dataset
+rosbag play MH_01_easy.bag -s 50
+rosbag play MH_02_easy.bag -s 45
+rosbag play MH_03_medium.bag -s 45
+rosbag play MH_04_difficult.bag -s 25
+rosbag play V1_01_easy.bag
+rosbag play V1_02_medium.bag -s 13
+rosbag play V2_01_easy.bag
+rosbag play V2_02_medium.bag -s 13
+
+V2_02 entropy 0.95 fail
+
+create bag with images and imu:
+rosrun rpg_datasets stereo_images_and_imus_from_euroc_to_bag.py in the data folder
+
+### RPG Trajectory Evaluation
+https://github.com/uzh-rpg/rpg_trajectory_evaluation
+#### vfr dataset
+remove id from ground truth using:
+rosrun 
+
+roslaunch svo_ros run_from_bag_vfr_pinhole.launch
+rosbag play ~/rpg_work/src/rpg_datasets/rpg_vfr_pinhole/rpg_vfr/out.bag
+
+record a bag with the estimated pose:
+rosbag record /svo/pose_imu /svo/image/0
+
+convert the bag into required format:
+rosrun rpg_trajectory_evaluation bag_to_pose.py /home/jkuo/side_project/svo_results/rpg_vfr/svo_results.bag /svo/pose_imu --msg_type PoseWithCovarianceStamped
+
+run evaluation:
+rosrun rpg_trajectory_evaluation analyze_trajectory_single.py /home/jkuo/side_project/svo_results/rpg_vfr/
+
+#### euroc dataset
+strip id from groundtruth.txt:
+rosrun rpg_trajectory_evaluation strip_gt_id.py groundtruth.txt
+roslaunch svo_ros euroc_mono_imu.launch
+rosbag play ~/side_project/datasets/euroc_MH_01_easy/out.bag -s 50
+rosbag record /svo/pose_imu /svo/image/0
+rosrun rpg_trajectory_evaluation bag_to_pose.py ./svo_results.bag /svo/pose_imu --msg_type PoseWithCovarianceStamped
+mv stamped_poses.txt stamped_traj_estimate.txt
+rosrun rpg_trajectory_evaluation analyze_trajectory_single.py /home/jkuo/side_project/laptop/svo_forward_default/euroc_MH_01_easy/
+
+#### compare multiple trajectory
+rosrun rpg_trajectory_evaluation analyze_trajectories.py --results_dir /home/jkuo/side_project/results/ --output_dir /home/jkuo/side_project/results/evaluation  --platform laptop --odometry_error --overall_odometry_error --plot_trajectories --rmse_table
+
+### entropy evaluation script
+python ~/rpg_work/src/rpg_svo_pro/plot_entropy.py
+
+### online entropy evaluation
+rqt
+subscribe to /svo/pose_refinement_entropy
+
+### SVO building logging trace
+need to set TRUE to the SvoSetup.cmake in svo_cmake
+trace dir: /home/jkuo/rpg_work/src/rpg_svo_pro/svo/trace
+
+### filters in entropy monitor
+#### incremental averaging by each keyframe
+Ref:
+https://dsp.stackexchange.com/questions/811/determining-the-mean-and-standard-deviation-in-real-time
+
+### Workding with Simulation
+#### Edit the world
+roslaunch gazebo_simulation_adr gazebo_empty_world.launch
+use save as
+#### Recrod dataset
+roslaunch gazebo_simulation_adr multicam_gazebo_simulation.launch
+
+roslaunch trajectory_generation_example generate.launch
+
+rosbag record /hummingbird/ground_truth/imu /hummingbird/ground_truth/pose_with_covariance /hummingbird/imu /hummingbird/rgb_camera/camera_1/camera_info /hummingbird/rgb_camera/camera_1/image_raw /hummingbird/rgb_camera/camera_2/camera_info /hummingbird/rgb_camera/camera_2/image_raw /hummingbird/rgb_camera/camera_3/camera_info /hummingbird/rgb_camera/camera_3/image_raw /hummingbird/rgb_camera/camera_4/camera_info /hummingbird/rgb_camera/camera_4/image_raw /hummingbird/rgb_camera/camera_5/camera_info /hummingbird/rgb_camera/camera_5/image_raw
+
+### Work with Ceres backend benchmarking
+use this branch: https://github.com/uzh-rpg/rpg_svo_pro/tree/ceres-backend-dev/svo_ceres_benchmarking
+git clone https://github.com/ethz-asl/ceres_catkin
+git clone https://github.com/ethz-asl/suitesparse
+
+Prepare a experiment configuartion file
+
+#### change data directory
+https://github.com/uzh-rpg/rpg_svo_pro/blob/1930244d849cf2bf72d46c900b958e24b10c541d/svo_ceres_benchmarking/scripts/benchmark.py#L163
+
+#### run experiment
+rosrun svo_ceres_benchmarking benchmark.py euroc_multicam_entropy0point96_nolc.yaml
+
+#### run evaluation with multi run
+use this repo until it is merged: 
+https://github.com/zhangzichao/rpg_trajectory_evaluation
+
+need to setup the analyze_trajectories_config
+
+rosrun rpg_trajectory_evaluation analyze_trajectories.py euroc_ceres_backend.yaml --output_dir=/home/jkuo/rpg_work/src/rpg_svo_pro/svo_ceres_benchmarking/results/evaluation --results_dir=/home/jkuo/rpg_work/src/rpg_svo_pro/svo_ceres_benchmarking/results --platform laptop --odometry_error_per_dataset --plot_trajectories --rmse_table --rmse_boxplot --mul_trials=5
+

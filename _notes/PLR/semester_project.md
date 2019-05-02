@@ -2,6 +2,7 @@
 catkin clean
 catkin build maplab
 catkin build --no-deps semantify_plugin
+catkin build --no-deps mask_rcnn_ros
 catkin build pybind11_catkin # need this until we add it to auto build
 
 ### Setting up matterport maskrcnn with gpu and virtualenv
@@ -512,6 +513,13 @@ visualize_initialized_tracked_objs --init_quadric_max_condition_number 3000 --in
 eval_quadrics_quality --eval_quadrics_field_of_view 40
 
 eval_quadric --eval_quadric_id 588 --eval_bb_up_to_num 0 --semantify_visualization_frequency 0.05 --init_quadric_max_condition_number 3000 --init_quadric_min_bounding_box_num 10 --semantify_visualization_by_class true
+
+For report:
+generate_init_quadric --tracking_method 1 --tracking_min_persistent_keypoints_threshold 12 --init_quadric_min_bounding_box_num 10 --semantify_visualization_frequency 0.05 --tracking_centroid_keypoint_shift_ratio 10.0 --init_quadric_max_condition_number 99999 --semantify_visualization_by_class true
+
+visualize_initialized_tracked_objs --init_quadric_max_condition_number 3000 --init_quadric_min_bounding_box_num 10 --semantify_visualization_by_class true
+
+eval_quadrics_quality --eval_quadrics_field_of_view 40
 
 ##### for the single chair case:
 generate_init_quadric --tracking_method 1 --tracking_min_persistent_keypoints_threshold 2 --init_quadric_min_bounding_box_num 40 --semantify_visualization_frequency 0.05 --tracking_centroid_keypoint_shift_ratio 100.0
