@@ -283,12 +283,23 @@ trace dir: /home/jkuo/rpg_work/src/rpg_svo_pro/svo/trace
 Ref:
 https://dsp.stackexchange.com/questions/811/determining-the-mean-and-standard-deviation-in-real-time
 
-### Workding with Simulation
+### Working with Simulation
+#### catkin build
+catkin build gazebo_simulation_adr on branch origin/multicam_robust
+catkin build svo_ros branch origin/multicam_robust
+catkin build trajectory_generation_example
+catkin build rpg_gazebo_models
+catkin build rqt_svo
+
+source devel/setup.bash
+
 #### Edit the world
 roslaunch gazebo_simulation_adr gazebo_empty_world.launch
 use save as
 #### Recrod dataset
 roslaunch gazebo_simulation_adr multicam_gazebo_simulation.launch
+
+roslaunch svo_ros
 
 roslaunch trajectory_generation_example generate.launch
 
@@ -315,3 +326,20 @@ need to setup the analyze_trajectories_config
 
 rosrun rpg_trajectory_evaluation analyze_trajectories.py euroc_ceres_backend.yaml --output_dir=/home/jkuo/rpg_work/src/rpg_svo_pro/svo_ceres_benchmarking/results/evaluation --results_dir=/home/jkuo/rpg_work/src/rpg_svo_pro/svo_ceres_benchmarking/results --platform laptop --odometry_error_per_dataset --plot_trajectories --rmse_table --rmse_boxplot --mul_trials=5
 
+### Calibrate with Kalibr with Images
+Create the clibration bag from images using:
+python kalibr_bagcreater --folder /home/jkuo/2017-11-16_Geometric_Calibration/GeometricCalibration_Front --output-bag 2017-11-16_GeometricCalibration_Front.bag
+
+Note: the bag creater requirse the name of the images to be in nanoseconds, but autovisoin calibration sequence does not have time as name.
+So we create the timestamp by incrementing seconds in the image sequence order.
+
+### Working with multicam dataset from CVG
+Need to download this: 
+https://github.com/USCiLab/cereal
+and put it in the include folder or find it somehow in your cmake file
+ADD_LIBRARY(cereal INTERFACE)
+
+TARGET_INCLUDE_DIRECTORIES(
+cereal
+INTERFACE include
+)
