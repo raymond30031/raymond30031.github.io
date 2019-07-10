@@ -343,3 +343,5 @@ TARGET_INCLUDE_DIRECTORIES(
 cereal
 INTERFACE include
 )
+
+### how to latex
