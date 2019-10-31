@@ -41,13 +41,18 @@ visualize_optional_resources_bounding_boxes --semantify_visualization_frequency 
 visualize_semantic_object_channels_in_visual_frame --semantify_visualization_frequency 0.1
 evaluate_semantic_landmark_with_track_id --semantify_visualization_frequency 0.1 --semantic_landmark_track_id 1
 evaluate_semantic_landmark_with_track_id --semantify_visualization_frequency 0.1 --semantic_landmark_track_id 501 --generate_descritpor_filter_by_mask=false
+evaluate_semantic_landmark_with_track_id --map_mission c277fc00e69fcc150d00000000000000 --semantic_landmark_track_id 89
 
-#### descriptor related
+#### match landmarks in a map
 ms to show map status and find mission id
+update_semantic_landmarks_class_ids
+visualize_initialized_semantic_landmarks
 generate_descriptor_clusters
+match_semantic_landmarks_in_one_mission --map_mission 85965582c59fcc150d00000000000000
 display_descriptor_clusters_scores --map_mission
 compare_descriptor_clusters_scores --descriptor_comparison_mission_id_0 c277fc00e69fcc150d00000000000000 --descriptor_comparison_mission_id_1 c277fc00e69fcc150d00000000000000 --descriptor_comparison_semantic_landmark_track_ids_0 2,163 --descriptor_comparison_semantic_landmark_track_ids_1 2,163
-#### map anchoring
+
+#### traditional map anchoring
 load --map_folder /media/jkuo/A8DD-8CBF/old_sensor_setup/data/quadric-2-1/quadric_2_1_with_semantic_landmarks/
 load_merge_map --map_folder /media/jkuo/A8DD-8CBF/old_sensor_setup/data/quadric-2-2/quadric_2_2_with_semantic_landmarks/
 ms
@@ -63,6 +68,116 @@ ms
 now mission 0 T_G_M is set to the reference and becomes known
 aam
 print_baseframes
+
+#### semantic landmark map anchoring
+load --map_folder /media/jkuo/A8DD-8CBF/old_sensor_setup/data/quadric-2-1/quadric_2_1_with_semantic_landmarks/
+load_merge_map --map_folder /media/jkuo/A8DD-8CBF/old_sensor_setup/data/quadric-2-2/quadric_2_2_with_semantic_landmarks/
+ms
+sbk --map_mission 85965582c59fcc150d00000000000000
+ms
+spatially_distribute_missions --spatially_distribute_missions_dimension 2 --spatially_distribute_missions_meters 5
+v --vis_color_by_mission
+update_semantic_landmarks_class_ids
+visualize_initialized_semantic_landmarks
+generate_descriptor_clusters
+anchor_mission_with_semantic_landmarks
+
+## traditional map anchoring
+### create database
+addAllMissionsWithKnownBaseFrameToProvidedLoopDetector()
+adds all mission with known frames to the loop detector database, where the images and landmarks 
+are compressed to descriptors and saved in the inverted index structure using loop_detector->addMissionToDatabase()
+
+### Find loop closure between the specified mission_id and the database
+in probeMissionAnchoring()
+
+loop_detector.detectLoopClosuresMissionToDatabase(
+      mission_id, kMergeLandmarksOnProbe, kAddLoopclosureEdgesOnProbe,
+      &result->num_vertex_candidate_links,
+      &result->average_landmark_match_inlier_ratio, map, &result->T_G_M,
+      &inlier_constraints);
+
+in loop-dectector-node.cc:
+### query for matches
+detectLoopClosuresVerticesToDatabase():
+  for every vertex in the specified mission:
+    queryVertexInDatabase():
+      converts all frames in the vertex to projected image
+      query the matches for the projected images in database
+        covisibility check:
+          From the paper Improving Image-Based Localization by Active Correspondence Search
+          Incorporating Additional Visibility Information section:
+          a) filter 3d points: when making a query with an image to the database, you can get 2d-3d correspondences that are incorrect,
+                               but matched becauset of descriptor similarity, we wish to remove these as they introduce problems for RANSAC.
+                               We cannot remove by thresholding distance from the 3d points with close proximity can be generated from 
+                               different views. The paper said it only keeps 3d points they are two edges away in the bipartite graph, 
+                               which means it only keeps the 3d points that are also visible in the frames that contains the query point.
+          b) RANSAC prefiltering: from the remaining correspondences, we do a ransac and filters out outliers and obtain a camera pose.
+          c) using camera sets: try to merge cameras to find more continuous point visibility because the previous method could be too stringent.
+                                From the set of similar images of the query image, we select k closest cameras that have less than 60 deg view 
+                                point difference from the query image and form a set S. A minimal subset S' ⊂ S ={sim(Ij )} of the camera sets 
+                                is selected such that every image Ij is contained in at least one set s ∈ S'. This is solved using greedy 
+                                algorithm.
+      for each matching frame:
+        convertFrameMatchesToConstraint():
+          struct FrameKeyPointToStructureMatch {
+            vi_map::KeypointIdentifier keypoint_id_query;
+            vi_map::VisualFrameIdentifier keyframe_id_result;
+            vi_map::LandmarkId landmark_result; }
+          each matches for this frame is converted to a constraint and push_back to raw_constraint
+      the raw constraints are send to handleLoopClosures
+      loop_closure_handler::LoopClosureHandler handler.handleLoopClosures():
+        for each raw constraint structure match (keypoint to landmark match):
+          fill in the the measurements and G_landmark_positions matrix with the size of the total num raw constraints
+        query_vertex_id is the vertex that we checked against the database and obtained matches for
+        use RANSAC to compute the transformation of this vertex to the map and gets T_G_I_ransac
+          pose_estimator.absoluteMultiPoseRansacPinholeCam(measurements, G_landmark_positions):
+            returns T_G_I_ransac and the set of inlier constraints
+        getBestStructureMatchForEveryKeypoint():
+          for each keypoint, associate it with the matches in inlier set that has the lowest reprojection error
+        LoopClosureHandler::mergeLandmarks():
+          map_->mergeLandmarks(query_landmark_to_be_deleted, map_landmark):
+            take all the observation of query_landmark_to_be_deleted and add it to map_landmark's observations
+            set all vertices that observe query_landmark_to_be_deleted to observe map_landmark
+            delete query_landmark_to_be_deleted from book keeping
+        Now we need to find the vertex in the pose graph that we create an edge with.
+        We choose the vertex that has the most overlapping landmarks from the inlier structure matches
+        lc_edge_target_vertex_id = vi_map_helpers::getVertexIdWithMostOverlappingLandmarks(query_vertex_id, *inlier_structure_matches, *map_, &commonly_observed_landmarks);
+        if (add_loopclosure_edges):
+          loop_closure_handler::addLoopClosureEdge(query_vertex_id, commonly_observed_landmarks,lc_edge_target_vertex_id, *T_G_I_ransac, map_):
+
+      T_M_I = query_vertex.get_T_M_I();
+      T_G_M2 = T_G_I_ransac * T_M_I.inverse();
+      Then adds the T_G_M2 to the list T_G_M2_vector_local
+  After we collect all the estimated T_G_M from all the verticies, we do a transformationRansac()
+  to find the inlier within the set and we use that as the transformation T_G_M_estimate for the specified mission
+  There is a kNumInliersThreshold check after the transformation RANSAC and it returns empty T_G_M_estimate if failed
+  What is Transformation RANSAC?
+    It uses the following two param to check 
+    lc_mission_baseframe_ransac_max_orientation_error_rad, lc_mission_baseframe_ransac_max_position_error_m to check if 
+    other T_G_M2_vector_local are inliers of the selected T_G_M2_vector_local.
+    After the num_iteration is finished, it perform a least square refinement on the best set of inliers
+
+## traditional loop closure
+### loop closure plugin
+creates a map merger  VIMapMerger
+then merger.findLoopClosuresBetweenAllMissions()
+in merger.findLoopClosuresBetweenMissions(mission_ids):
+creates/load a loop detector (database)
+if create:
+do the top half triangle of the comparison matrix including self 
+loop_detector.addMissionToDatabase(*it, *map_)
+  loop_detector.detectLoopClosuresAndMergeLandmarks(mission):
+    detectLoopClosuresMissionToDatabase():
+      get all vertices in mission
+      detectLoopClosuresVerticesToDatabase():
+        queryVertexInDatabase()
+
+
+## traditional OptimizerPlugin::optimizeVisualInertial
+### optvi
+map-structure/posegraph
+the work is based on 
 
 ## Deep Sort
 
