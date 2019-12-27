@@ -316,7 +316,7 @@ Prepare a experiment configuartion file
 https://github.com/uzh-rpg/rpg_svo_pro/blob/1930244d849cf2bf72d46c900b958e24b10c541d/svo_ceres_benchmarking/scripts/benchmark.py#L163
 
 #### run experiment
-rosrun svo_ceres_benchmarking benchmark.py euroc_multicam_entropy0point96_nolc.yaml
+rosrun svo_ceres_benchmarking benchmark.py euroc_multicam_entropy0point96_nolc.yaml --n_trials 5 
 
 #### run evaluation with multi run
 use this repo until it is merged: 
@@ -326,6 +326,9 @@ need to setup the analyze_trajectories_config
 
 rosrun rpg_trajectory_evaluation analyze_trajectories.py euroc_ceres_backend.yaml --output_dir=/home/jkuo/rpg_work/src/rpg_svo_pro/svo_ceres_benchmarking/results/evaluation --results_dir=/home/jkuo/rpg_work/src/rpg_svo_pro/svo_ceres_benchmarking/results --platform laptop --odometry_error_per_dataset --plot_trajectories --rmse_table --rmse_boxplot --mul_trials=5
 
+rosrun svo_ceres_benchmarking organize_results_mul.py --result_dir /home/juichung/new_rpg_work/src/rpg_svo_pro/svo_ceres_benchmarking/results/20190904_145426_euroc_multicam_entropy_voxel_map_nolc_default_stereo_10kf_yesbackend --save_dir /home/juichung/new_rpg_work/src/rpg_svo_pro/svo_ceres_benchmarking/results/euroc_stereo_exps --mul_trials 5
+
+rosrun rpg_trajectory_evaluation analyze_trajectories.py euroc_multicam_voxel.yaml --output_dir /home/juichung/new_rpg_work/src/rpg_svo_pro/svo_ceres_benchmarking/results/euroc_stereo_exps/evaluation --results_dir /home/juichung/new_rpg_work/src/rpg_svo_pro/svo_ceres_benchmarking/results/euroc_stereo_exps --platform laptop --odometry_error_per_dataset --plot_trajectories --rmse_table --rmse_boxplot --mul_trials 5
 ### Calibrate with Kalibr with Images
 Create the clibration bag from images using:
 python kalibr_bagcreater --folder /home/jkuo/2017-11-16_Geometric_Calibration/GeometricCalibration_Front --output-bag 2017-11-16_GeometricCalibration_Front.bag
@@ -345,3 +348,9 @@ INTERFACE include
 )
 
 ### how to latex
+
+###
+rosbag record /rosout /rosout_agg /svo/image/0 /svo/image/1 /svo/image/2 /svo/image/3 /svo/image/4 /svo/keyframes /svo/keyframes_array /svo/markers /svo/pointcloud /svo/points /svo/points_array /svo/pose_cam/0 /svo/pose_cam/1 /svo/pose_cam/2 /svo/pose_cam/3 /svo/pose_cam/4 /svo/pose_imu /tf /tf_static
+
+### rosbag for paper
+rosbag record /rosout /rosout_agg /svo/image/0 /svo/image/1 /svo/image/2 /svo/image/3 /svo/image/4 /svo/keyframes /svo/points /svo/pointcloud /svo/pose_cam/0 /svo/pose_cam/1 /svo/pose_cam/2 /svo/pose_cam/3 /svo/pose_cam/4 /svo/pose_imu /tf /tf_static /svo/pointcloud_overlap_kf /svo/pointcloud_voxel
