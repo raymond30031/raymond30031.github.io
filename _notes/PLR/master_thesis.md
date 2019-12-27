@@ -4,6 +4,10 @@ rosrun rovioli VersaVIS /media/jkuo/7B1C-8EC8/JC_master_thesis/data/quadric-1 /m
 cd /media/jkuo/A8DD-8CBF/datasets
 rosrun resource_importer import_resources_w_ncamera_yaml.sh asl_small_loop_with_lc_in_mapping_corner_2/raw asl_small_loop_with_lc_in_mapping_corner_2_2019-09-18-16-40-07.bag /VersaVIS/cam0/image_raw ncamera-VersaVIS.yaml asl_small_loop_with_lc_in_mapping_corner_2/with_rgb
 
+rosrun rovioli lidarstick /media/jkuo/A8DD-8CBF/dataset2/asl_koze_table_one_side_with_loop_light_change_max /media/jkuo/A8DD-8CBF/dataset2/asl_koze_table_one_side_with_loop_light_change_max.bag
+
+rosrun rovioli lidarstick /media/jkuo/KINGSTON/dataset2/asl_koze_table_one_side_with_loop_light_change_medium /media/jkuo/KINGSTON/dataset2/asl_koze_table_one_side_with_loop_light_change_medium.bag
+
 ### visualize the map
 rosrun maplab_console maplab_console
 load --map_folder /media/jkuo/7B1C-8EC8/JC_master_thesis/data/quadric-1
@@ -12,7 +16,7 @@ v
 ### optimize the map
 initialize untrack landmarks so we have all landmarks: itl
 optimizes the map with ba num iteration limit: optvi --ba_num_iterations 10
-look up what this does: elq
+Evaluates and sets the landmark quality of all landmarks: elq 
 add loop closure constraints: lc
 optimize again because lc does not optimize but only add constraints: optvi --ba_num_iterations 10
 
@@ -23,8 +27,13 @@ rosrun resource_importer import_resources_w_ncamera_yaml.sh quadric-1 quadric-1.
 
 load --map_folder /media/jkuo/7B1C-8EC8/JC_master_thesis/data/quadric-1-color
 
+rosrun resource_importer import_resources_w_ncamera_yaml.sh asl_koze_table_one_side_with_loop_light_change_max/raw/ asl_koze_table_one_side_with_loop_light_change_max.bag /VersaVIS/cam0/image_raw ./lidarstick-150-deg-cams-sensors-w-lidar-camera.yaml ./asl_koze_table_one_side_with_loop_light_change_max/with_rgb/
+
+rosrun resource_importer import_resources_w_ncamera_yaml.sh asl_koze_table_one_side_with_loop_light_change_max/raw/ adjusted.bag /VersaVIS/cam0/image_raw ./lidarstick-150-deg-cams-sensors-w-lidar-camera.yaml ./asl_koze_table_one_side_with_loop_light_change_max/with_rgb/
+
 ### Semantify commands
-semantify --semantify_start_index 105 --semantify_by_vertex_time true
+rosrun mask_rcnn_ros mask_rcnn_node.py
+semantify --semantify_start_index 0 --semantify_by_vertex_time true
 
 rosrun netvlad_tf netvlad_node.py
 generate_and_save_semantic_object_measurements
@@ -34,19 +43,24 @@ generate_and_save_semantic_object_track_ids_from_deepsort --tracking_confidence_
 
 visualize_semantic_object_channels_in_visual_frame --semantify_visualization_frequency 0.2 --tracking_confidence_threshold 0.85
 
+save --map_folder path/to/save/the/map --overwrite
 
 rviz
-visualize_initialized_semantic_landmarks
+visualize_semantic_landmarks_and_generate_track_id_to_semantic_landmark_map
 visualize_optional_resources_bounding_boxes --semantify_visualization_frequency 0.1
 visualize_semantic_object_channels_in_visual_frame --semantify_visualization_frequency 0.1
 evaluate_semantic_landmark_with_track_id --semantify_visualization_frequency 0.1 --semantic_landmark_track_id 1
 evaluate_semantic_landmark_with_track_id --semantify_visualization_frequency 0.1 --semantic_landmark_track_id 501 --generate_descritpor_filter_by_mask=false
 evaluate_semantic_landmark_with_track_id --map_mission c277fc00e69fcc150d00000000000000 --semantic_landmark_track_id 89
+evaluate_semantic_landmark_with_track_id --semantic_landmark_track_id 89
+
+### create semantic landmarks
+itsl --vi_map_semantic_landmark_quality_min_observation_angle_deg 10
 
 #### match landmarks in a map
 ms to show map status and find mission id
 update_semantic_landmarks_class_ids
-visualize_initialized_semantic_landmarks
+visualize_semantic_landmarks_and_generate_track_id_to_semantic_landmark_map
 generate_descriptor_clusters
 match_semantic_landmarks_in_one_mission --map_mission 85965582c59fcc150d00000000000000
 display_descriptor_clusters_scores --map_mission
@@ -61,7 +75,7 @@ spatially_distribute_missions --spatially_distribute_missions_dimension 2 --spat
 v --vis_color_by_mission 
 
 update_semantic_landmarks_class_ids
-visualize_initialized_semantic_landmarks
+visualize_semantic_landmarks_and_generate_track_id_to_semantic_landmark_map
 
 sbk --map_mission 85965582c59fcc150d00000000000000
 ms
@@ -78,9 +92,10 @@ ms
 spatially_distribute_missions --spatially_distribute_missions_dimension 2 --spatially_distribute_missions_meters 5
 v --vis_color_by_mission
 update_semantic_landmarks_class_ids
-visualize_initialized_semantic_landmarks
+visualize_semantic_landmarks_and_generate_track_id_to_semantic_landmark_map
 generate_descriptor_clusters
-anchor_mission_with_semantic_landmarks
+calculate_semantic_landmark_covariances
+anchor_mission_with_semantic_landmarks --semantic_landmark_max_match_candidate_distance 8 --semantic_landmark_anchoring_ransac_min_inlier_ratio 0.3
 
 ## traditional map anchoring
 ### create database
@@ -174,10 +189,126 @@ loop_detector.addMissionToDatabase(*it, *map_)
         queryVertexInDatabase()
 
 
+### semantic landmark loop closure
+load --map_folder /media/jkuo/A8DD-8CBF/datasets/asl_koze_table_both_sides_with_loop/with_semantic_landmarks20/
+update_semantic_landmarks_class_ids 
+visualize_semantic_landmarks_and_generate_track_id_to_semantic_landmark_map --semantic_landmark_class_filter "1,73,61,57"
+generate_descriptor_clusters
+calculate_semantic_landmark_covariances
+loop_close_missions_with_semantic_landmarks --loop_closure_mission_id_ref c3c402890f1ec6150d00000000000000 --loop_closure_mission_id_source c3c402890f1ec6150d00000000000000 --semantic_landmark_lc_extend_visible_verticies_num 100 --semantic_landmark_lc_extend_visible_verticies=true --semantic_landmark_lc_merge_matched_landmarks=false --semantic_landmark_lc_add_edge_between_topological_center_vertices=true
+optvi --ba_visualize_every_n_iterations 1
+rtsl
+v
+update_semantic_landmarks_class_ids
+visualize_semantic_landmarks_and_generate_track_id_to_semantic_landmark_map
+
+#### Tuning parameters for semantic loop closure:
+
+##### view point change:
+load --map_folder /media/jkuo/A8DD-8CBF/datasets/asl_koze_table_both_sides_with_loop/with_semantic_landmarks20/
+v
+update_semantic_landmarks_class_ids
+visualize_semantic_landmarks_and_generate_track_id_to_semantic_landmark_map
+generate_descriptor_clusters
+calculate_semantic_landmark_covariances
+loop_close_missions_with_semantic_landmarks --loop_closure_mission_id_ref c3c402890f1ec6150d00000000000000 --loop_closure_mission_id_source c3c402890f1ec6150d00000000000000 --semantic_landmark_matching_filter_by_match_candidate_distance=true --semantic_landmark_lc_extend_visible_verticies_num 100 --semantic_landmark_lc_extend_visible_verticies=true --visualize_accepted_loop_closure_edge=true --semantic_landmark_anchoring_ransac_min_inlier_num=4 --semantic_landmark_lc_max_covisible_object_candidate_distance_difference 0.6 --semantic_landmark_anchoring_ransac_min_inlier_ratio 0.6 --semantic_landmark_lc_add_edge_between_topological_center_vertices=false --semantic_landmark_lc_merge_matched_landmarks=false --semantic_landmark_lc_remove_old_edges=false
+visualize_semantic_loop_closure_edge_covariances
+
+load --map_folder /media/jkuo/A8DD-8CBF/datasets/asl_koze_table_round_and_round_he_goes/with_optvi_nolc_semantic_landmarks
+update_semantic_landmarks_class_ids
+visualize_semantic_landmarks_and_generate_track_id_to_semantic_landmark_map
+generate_descriptor_clusters
+calculate_semantic_landmark_covariances
+loop_close_missions_with_semantic_landmarks --loop_closure_mission_id_ref c9b4d48ec021c6150d00000000000000 --loop_closure_mission_id_source c9b4d48ec021c6150d00000000000000 --semantic_landmark_matching_filter_by_match_candidate_distance=true --semantic_landmark_lc_extend_visible_verticies_num 40 --semantic_landmark_lc_extend_visible_verticies=true --semantic_landmark_anchoring_ransac_min_inlier_num=5 --visualize_accepted_loop_closure_edge=true --semantic_landmark_anchoring_ransac_min_inlier_ratio 0.8 --semantic_landmark_lc_add_edge_between_topological_center_vertices=false --semantic_landmark_lc_merge_matched_landmarks=false --semantic_landmark_lc_remove_old_edges=false 
+visualize_semantic_loop_closure_edge_covariances
+
+load --map_folder /media/jkuo/A8DD-8CBF/datasets/asl_koze_table_one_side_with_loop/with_optvi_nolc_semantic_landmarks/
+update_semantic_landmarks_class_ids
+visualize_semantic_landmarks_and_generate_track_id_to_semantic_landmark_map
+generate_descriptor_clusters
+calculate_semantic_landmark_covariances
+loop_close_missions_with_semantic_landmarks --loop_closure_mission_id_ref 7c72ec38581ec6150d00000000000000 --loop_closure_mission_id_source 7c72ec38581ec6150d00000000000000 --semantic_landmark_matching_filter_by_match_candidate_distance=true --semantic_landmark_lc_extend_visible_verticies_num 60 --visualize_accepted_loop_closure_edge=true --semantic_landmark_anchoring_ransac_min_inlier_num=5 --semantic_landmark_anchoring_ransac_min_inlier_ratio 0.5 --semantic_landmark_lc_add_edge_between_topological_center_vertices=false --semantic_landmark_lc_merge_matched_landmarks=false --semantic_landmark_lc_remove_old_edges=false
+visualize_semantic_loop_closure_edge_covariances
+
+loop closure between two maps:
+
+load --map_folder /media/jkuo/A8DD-8CBF/old_sensor_setup/data/quadric-2-1/quadric_2_1_with_semantic_landmarks/
+load_merge_map --map_folder /media/jkuo/A8DD-8CBF/old_sensor_setup/data/quadric-2-2/quadric_2_2_with_semantic_landmarks/
+update_semantic_landmarks_class_ids
+visualize_semantic_landmarks_and_generate_track_id_to_semantic_landmark_map
+generate_descriptor_clusters
+calculate_semantic_landmark_covariances
+loop_close_missions_with_semantic_landmarks --loop_closure_mission_id_ref 85965582c59fcc150d00000000000000 --loop_closure_mission_id_source c277fc00e69fcc150d00000000000000 --semantic_landmark_lc_extend_visible_verticies_num 100 --visualize_accepted_loop_closure_edge=false --semantic_landmark_anchoring_ransac_min_inlier_num=8 --semantic_landmark_anchoring_ransac_min_inlier_ratio 0.6 --semantic_landmark_lc_max_covisible_object_candidate_distance_difference 0.2 --semantic_landmark_lc_add_edge_between_topological_center_vertices=false --semantic_landmark_lc_merge_matched_landmarks=false --semantic_landmark_lc_remove_old_edges=false
+evaluate_semantic_landmark_with_track_id --map_mission 85965582c59fcc150d00000000000000 --semantic_landmark_track_id 2
+evaluate_semantic_landmark_with_track_id --map_mission c277fc00e69fcc150d00000000000000 --semantic_landmark_track_id 1
+
+
+load --map_folder /media/jkuo/A8DD-8CBF/datasets/asl_koze_table_one_side_with_loop/with_optvi_nolc_semantic_landmarks/
+load_merge_map --map_folder /media/jkuo/A8DD-8CBF/datasets/asl_koze_table_both_sides_with_loop/with_semantic_landmarks20/
+sbk --map_mission 7c72ec38581ec6150d00000000000000
+anchor_mission_with_semantic_landmarks --semantic_landmark_anchoring_ransac_min_inlier_ratio 0.15
+update_semantic_landmarks_class_ids
+visualize_semantic_landmarks_and_generate_track_id_to_semantic_landmark_map
+generate_descriptor_clusters
+calculate_semantic_landmark_covariances
+loop_close_missions_with_semantic_landmarks --loop_closure_mission_id_ref 7c72ec38581ec6150d00000000000000 --loop_closure_mission_id_source c3c402890f1ec6150d00000000000000 --semantic_landmark_lc_extend_visible_verticies_num 60 --semantic_landmark_max_match_candidate_distance 8 --visualize_accepted_loop_closure_edge=false --semantic_landmark_anchoring_ransac_min_inlier_num=6 --semantic_landmark_anchoring_ransac_min_inlier_ratio 0.6 --semantic_landmark_lc_max_covisible_object_candidate_distance_difference 0.2 --semantic_landmark_lc_add_edge_between_topological_center_vertices=false --semantic_landmark_lc_merge_matched_landmarks=false --semantic_landmark_lc_remove_old_edges=false
+evaluate_semantic_landmark_with_track_id --map_mission c3c402890f1ec6150d00000000000000 --semantic_landmark_track_id 415
+evaluate_semantic_landmark_with_track_id --map_mission 7c72ec38581ec6150d00000000000000 --semantic_landmark_track_id 409
+
+load --map_folder /media/jkuo/A8DD-8CBF/datasets/asl_koze_table_round_and_round_he_goes/visual_lc_with_semantic_lm
+load_merge_map --map_folder /media/jkuo/A8DD-8CBF/datasets/asl_koze_table_both_sides_with_loop/with_semantic_landmarks20/
+update_semantic_landmarks_class_ids
+visualize_semantic_landmarks_and_generate_track_id_to_semantic_landmark_map
+generate_descriptor_clusters
+calculate_semantic_landmark_covariances
+loop_close_missions_with_semantic_landmarks --loop_closure_mission_id_ref c9b4d48ec021c6150d00000000000000 --loop_closure_mission_id_source c3c402890f1ec6150d00000000000000 --semantic_landmark_lc_extend_visible_verticies_num 80 --semantic_landmark_max_match_candidate_distance 5 --visualize_accepted_loop_closure_edge=false --semantic_landmark_anchoring_ransac_min_inlier_num=4 --semantic_landmark_anchoring_ransac_min_inlier_ratio 0.6 --semantic_landmark_lc_max_covisible_object_candidate_distance_difference 0.3 --semantic_landmark_lc_add_edge_between_topological_center_vertices=false --semantic_landmark_lc_merge_matched_landmarks=false --semantic_landmark_lc_remove_old_edges=false
+evaluate_semantic_landmark_with_track_id --map_mission c3c402890f1ec6150d00000000000000 --semantic_landmark_track_id 853
+evaluate_semantic_landmark_with_track_id --map_mission c9b4d48ec021c6150d00000000000000 --semantic_landmark_track_id 571
+optvi --map_mission c3c402890f1ec6150d00000000000000
+optvi --map_mission c9b4d48ec021c6150d00000000000000
+
+create groundtruth from all maps:
+load --map_folder /media/jkuo/A8DD-8CBF/datasets/asl_koze_table_one_side_with_loop/with_optvi_nolc_semantic_landmarks/
+load_merge_map --map_folder /media/jkuo/A8DD-8CBF/datasets/asl_koze_table_round_and_round_he_goes/with_optvi_nolc_semantic_landmarks
+load_merge_map --map_folder /media/jkuo/A8DD-8CBF/datasets/asl_koze_table_both_sides_with_loop/with_semantic_landmarks20/
+lc
+optvi
+
+##### light intensity change:
+for this map, we ignore chairs because we had to reduce the minimum view angle required to get more landmarks on the table.
+As a consequence, more bad chair landmarks appear made the inlier ratio kind of useless. So we ignore chairs for this map.
+
+load --map_folder /media/jkuo/A8DD-8CBF/dataset2/asl_koze_table_one_side_with_loop_light_change_medium/with_semantic_landmarks5_point7confidence/
+update_semantic_landmarks_class_ids
+visualize_semantic_landmarks_and_generate_track_id_to_semantic_landmark_map --semantic_landmark_class_filter "1,73,61,57"
+generate_descriptor_clusters
+calculate_semantic_landmark_covariances
+loop_close_missions_with_semantic_landmarks --loop_closure_mission_id_ref 093e162baf13df150d00000000000000 --loop_closure_mission_id_source 093e162baf13df150d00000000000000 --semantic_landmark_matching_filter_by_match_candidate_distance=true --semantic_landmark_lc_extend_visible_verticies_num 100 --semantic_landmark_lc_extend_visible_verticies=true --visualize_accepted_loop_closure_edge=true --semantic_landmark_anchoring_ransac_min_inlier_num=6 --semantic_landmark_anchoring_ransac_min_inlier_ratio 0.6 --semantic_landmark_lc_max_covisible_object_candidate_distance_difference 0.6 --semantic_landmark_lc_add_edge_between_topological_center_vertices=false --semantic_landmark_lc_merge_matched_landmarks=false --semantic_landmark_lc_remove_old_edges=false
+
+load --map_folder /media/jkuo/A8DD-8CBF/dataset2/asl_koze_table_one_side_with_loop_light_change_max/with_semantic_landmarks20/
+mission id 2e0aa9515913df150d00000000000000
+
+load --map_folder /media/jkuo/A8DD-8CBF/dataset2/asl_koze_table_both_side_with_loop_light_change_medium/with_semantic_landmarks5_point6/
+mission id 80d309e60614df150d00000000000000
+
+load --map_folder /media/jkuo/KINGSTON/dataset2/asl_koze_table_one_side_with_loop_light_change_medium/with_semantify
+mission id 80d309e60614df150d00000000000000
+
+## export posegraph in rpg format for evaluation
+ettc_rpg --pose_export_file ~/semantic_lc_top_OneSide.txt
+ettc_rpg --map_mission 093e162baf13df150d00000000000000 --pose_export_file ~/gt_light_change_medium_OneSide.txt
+ettc_rpg --map_mission 2e0aa9515913df150d00000000000000 --pose_export_file ~/gt_light_change_max_OneSide.txt
+ettc_rpg --map_mission 80d309e60614df150d00000000000000 --pose_export_file ~/gt_light_change_medium_BothSide.txt
+
 ## traditional OptimizerPlugin::optimizeVisualInertial
 ### optvi
 map-structure/posegraph
 the work is based on 
+
+## trajectory evaluation
+rosrun rpg_trajectory_evaluation analyze_trajectories.py asl_map_lc_comparison.yaml --output_dir=/home/jkuo/maplab_ws/src/rpg_trajectory_evaluation/evaluation/asl_map_lc_comparison --results_dir=/home/jkuo/maplab_ws/src/rpg_trajectory_evaluation/results/asl_map --platform laptop --odometry_error_per_dataset --plot_trajectories --rmse_table --rmse_boxplot
+
+rosrun rpg_trajectory_evaluation analyze_trajectory_single.py .
 
 ## Deep Sort
 
