@@ -310,6 +310,13 @@ rosrun rpg_trajectory_evaluation analyze_trajectories.py asl_map_lc_comparison.y
 
 rosrun rpg_trajectory_evaluation analyze_trajectory_single.py .
 
+
+## dataset storage
+sftp j225-students@data.asl.ethz.ch
+
+Location:
+/J225-students/jkuo-semantic-mapping
+
 ## Deep Sort
 
 ### Details
